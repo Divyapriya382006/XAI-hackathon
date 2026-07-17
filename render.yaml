@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: xai-hackathon
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.cjs
+    envVars:
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
