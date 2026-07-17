@@ -309,7 +309,7 @@ This means the live pipeline could not complete — most commonly because `GEMIN
 
 **Frontend gets 404s calling the API in preview mode.**
 Confirm the API base URL used by the frontend matches the actual Express server port, especially if you're serving the built frontend via `vite preview` on `4173`/`5173` while the API runs on a different port. Set an explicit API base URL via an environment variable (e.g. `VITE_API_BASE_URL`) if your deployment splits frontend/backend across different origins.
-
+ 
 **All my queries return suspiciously similar-looking results.**
 This indicates the fixture/demo path is leaking into the live path. Search the codebase for hardcoded example strings (company names, mission IDs, sample hashes) outside of `demo_cases.ts` — none should exist in `server.ts` or the live request handlers.
 
