@@ -9,6 +9,7 @@ import { generateInvestigationCase, generateClaimFromSource, generateAlternative
 import { ThinkingStep } from "./src/types";
 
 dotenv.config();
+const app = express();
 
 import cors from "cors";
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
