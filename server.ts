@@ -246,7 +246,7 @@ async function searchTavily(query: string, maxResults = 18): Promise<SearchResul
 
 // ─── Page Fetch + Plain Text Extraction ───────────────────────────────────────
 
-async function fetchAndExtractText(url: string, timeoutMs = 8000): Promise<{
+async function fetchAndExtractText(url: string, timeoutMs = 3000): Promise<{
   httpStatus: number;
   plainText: string;
   title: string;
@@ -407,7 +407,7 @@ async function runRealInvestigation(query: string, userAttachedUrls: string[] = 
     failedReasonText?: string;
   }> = [];
 
-  const candidatesToFetch = allCandidates.slice(0, 22);
+  const candidatesToFetch = allCandidates.slice(0, 6);
 
   for (const candidate of candidatesToFetch) {
     const fetchedAt = new Date().toISOString();
