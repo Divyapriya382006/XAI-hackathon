@@ -11,7 +11,7 @@ import { ThinkingStep } from "./src/types";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || "3000", 10);
 
 app.use(express.json({ limit: "10mb" }));
 
@@ -754,21 +754,25 @@ app.get("/api/health", (_req, res) => {
 });
 
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    console.log("Setting up Vite Dev Server Middleware...");
+  const distPath = path.join(process.cwd(), "dist");
+  const isProduction = require("fs").existsSync(path.join(distPath, "index.html"));
+
+  if (isProduction) {
+    console.log("[EAIP] Production mode — serving static files from dist/");
+    app.use(express.static(distPath));
+    // SPA catch-all: serve index.html for non-API routes only
+    app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(distPath, "index.html")));
+  } else {
+    console.log("[EAIP] Development mode — setting up Vite dev server...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[EAIP Server] http://localhost:${PORT} — Tavily search enabled`);
+    console.log(`[EAIP Server] http://localhost:${PORT} — mode: ${isProduction ? "production" : "development"}`);
   });
 }
 

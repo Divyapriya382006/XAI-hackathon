@@ -223,10 +223,7 @@ export default function App() {
     setError(null);
 
     try {
-      const apiHost = window.location.port && window.location.port !== '3000' 
-        ? `${window.location.protocol}//${window.location.hostname}:3000` 
-        : '';
-      const response = await fetch(`${apiHost}/api/investigate`, {
+      const response = await fetch('/api/investigate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
