@@ -11,14 +11,18 @@ import { ThinkingStep } from "./src/types";
 dotenv.config();
 const app = express();
 
-import cors from "cors";
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-  credentials: true
-}));
-app.options("*", cors() as any); // Explicitly handle preflight OPTIONS for all paths
+// CORS Middleware
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, PATCH, DELETE");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 app.use(express.json({ limit: "10mb" }));
