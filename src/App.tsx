@@ -223,8 +223,20 @@ export default function App() {
     setError(null);
 
     try {
-      const apiBase = process.env.REACT_APP_API_BASE || '';
-      const response = await fetch(`${apiBase}/api/investigate`, {
+      console.log('API base:', apiBase);      const response = await fetch(`${apiBase}/api/investigate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          demoMode: false,
+          inputs: attachedFiles.map(f => ({
+            type: f.type,
+            name: f.name,
+            size: f.size,
+            content: f.content
+          }))
+        })
+      });
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
