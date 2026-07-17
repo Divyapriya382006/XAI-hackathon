@@ -223,20 +223,9 @@ export default function App() {
     setError(null);
 
     try {
-      console.log('API base:', apiBase);      const response = await fetch(`${apiBase}/api/investigate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question,
-          demoMode: false,
-          inputs: attachedFiles.map(f => ({
-            type: f.type,
-            name: f.name,
-            size: f.size,
-            content: f.content
-          }))
-        })
-      });
+      const apiBase = import.meta.env.VITE_API_BASE || 'https://xai-hackathon.onrender.com';
+      console.log('API base:', apiBase);
+      const response = await fetch(`${apiBase}/api/investigate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
