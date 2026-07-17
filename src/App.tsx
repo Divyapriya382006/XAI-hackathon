@@ -54,30 +54,36 @@ import CitationTrailViewer from './components/CitationTrailViewer';
 import CounterfactualSandbox from './components/CounterfactualSandbox';
 import VerificationReport from './components/VerificationReport';
 import SimulationConsoleView from './components/SimulationConsoleView';
-import { getDemoCaseResult } from './demo_cases';
+import ThinkingProcessViewer from './components/ThinkingProcessViewer';
+import AllSourcesPanel from './components/AllSourcesPanel';
 
 export default function App() {
   // Input states
-  const [question, setQuestion] = useState<string>('Did Coca-Cola exaggerate its sustainability claims?');
-  const [attachedFiles, setAttachedFiles] = useState<UserInputFile[]>([
-    { 
-      name: 'coca_cola_esg_report_2023.pdf', 
-      type: 'pdf', 
-      size: '1.8 MB', 
-      content: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iagogIDw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iagogIDw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbIDMgMCBSIF0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKICA8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUgODQyIF0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNCAwIFIgPj4gPj4gL0NvbnRlbnRzIDUgMCBSID4+CmVuZG9iago0IDAgb2JqCiAgPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCiAgPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCiAgPDwgL0xlbmd0aCAxNTAgPj4Kc3RyZWFtCkJUCi9GMSA0NiBUZgoxMCA3NTAgVGQKKEVtaXNzaW9ucyBSZXBvcnQgMjAyNSAtIFN1c3RhaW5hYmlsaXR5IEpvdXJuYWwpIFRqCjAgLTUwIFRkCihDbGFpbXM6IENhcmJvbiBuZXV0cmFsaXR5IGFjaGlldmVkIGJ5IG9mZnNldCByZWZvcmVzdGF0aW9uIGluIEFyZWEgMTItQi4pIFRqCjAgLTMwIFRkCihBY3R1YWwgc2F0ZWxsaXRlIGRhdGEgc2hvd3MgODglIGRlZm9yZXN0YXRpb24gaW4gQXJlYSAxMi1CLikgVGoKRVQKZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTUgMDAwMDAgbiAKMDAwMDAwMDA2NiAwMDAwMCBuIAowMDAwMDAwMTIzIDAwMDAwIGYgCjAwMDAwMDAyMzQgMDAwMDAgbiAKMDAwMDAwMDI5NCAwMDAwMCBuIAp0cmFpbGVyCiAgPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDk5CiUlRU9GCg==' 
-    }
-  ]);
+  const [question, setQuestion] = useState<string>('');
+  const [attachedFiles, setAttachedFiles] = useState<UserInputFile[]>([]);
   const [newUrl, setNewUrl] = useState<string>('');
 
   // Execution states
   const [isInvestigating, setIsInvestigating] = useState<boolean>(false);
   const [result, setResult] = useState<InvestigationCase | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [useSimulationOnly, setUseSimulationOnly] = useState<boolean>(false);
-  const [selectedTopic, setSelectedTopic] = useState<'sustainability' | 'theranos' | 'tesla'>('sustainability');
+  const [thinkingSteps, setThinkingSteps] = useState<import('./types').ThinkingStep[]>([]);
+  const [allSources, setAllSources] = useState<import('./types').Source[]>([]);
+
+  // ── Causal timing state ─────────────────────────────────────────────────
+  // These three timestamps prove the correct causal order:
+  //   requestSentAt < responseReceivedAt < verdictVisibleAt
+  const [requestSentAt, setRequestSentAt] = useState<string | null>(null);
+  const [responseReceivedAt, setResponseReceivedAt] = useState<string | null>(null);
+  const [verdictVisibleAt, setVerdictVisibleAt] = useState<string | null>(null);
+  // animationComplete gates whether the verdict banner renders at all.
+  // It starts false and is set true only when currentStep reaches 13.
+  const [animationComplete, setAnimationComplete] = useState<boolean>(false);
+  // actualBackendMs: real measured latency in ms, used to pace animation
+  const actualBackendMsRef = useRef<number>(0);
 
   // Redesign Feature State: Timeline Replay Controls & Active Node Focus
-  const [currentStep, setCurrentStep] = useState<number>(13); // Default to final step (completed)
+  const [currentStep, setCurrentStep] = useState<number>(0);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isReplaying, setIsReplaying] = useState<boolean>(false);
   const [replaySpeed, setReplaySpeed] = useState<number>(1); // 0.5x, 1x, 2x, 5x
@@ -87,17 +93,30 @@ export default function App() {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto handle replay timing simulation
+  // ── Animation replay effect ────────────────────────────────────────────
+  // The interval duration is derived from the REAL backend latency so that:
+  //   - If the backend took 30 s, each of 14 steps shows for ~2 s (realistic)
+  //   - If it took 5 s, each step is ~350 ms (snappy)
+  // replaySpeed is a user multiplier on top.
   useEffect(() => {
     if (isReplaying) {
-      const intervalMs = Math.round(1500 / replaySpeed);
+      // Target: spread 14 steps across ~80% of actual backend time (min 800ms/step)
+      const backendMs = actualBackendMsRef.current || 14_000;
+      const baseIntervalMs = Math.max(800, Math.round((backendMs * 0.8) / 14));
+      const intervalMs = Math.round(baseIntervalMs / replaySpeed);
+
       playTimerRef.current = setInterval(() => {
         setCurrentStep((prev) => {
-          if (prev >= 13) {
+          const next = prev + 1;
+          if (next >= 13) {
+            // Animation has reached the END node — only NOW unlock the verdict banner
             setIsReplaying(false);
+            setAnimationComplete(true);
+            // Record exact timestamp when verdict becomes visible
+            setVerdictVisibleAt(new Date().toISOString());
             return 13;
           }
-          return prev + 1;
+          return next;
         });
       }, intervalMs);
     } else {
@@ -185,77 +204,31 @@ export default function App() {
     setNewUrl('');
   };
 
-  // Prebuilt case templates selection
-  const selectTemplateCase = (topic: 'sustainability' | 'theranos' | 'tesla') => {
-    setSelectedTopic(topic);
-    if (topic === 'sustainability') {
-      setQuestion('Did Coca-Cola exaggerate its sustainability claims?');
-      setAttachedFiles([
-        { 
-          name: 'emissions_report_2025.pdf', 
-          type: 'pdf', 
-          size: '1.8 MB', 
-          content: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iagogIDw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iagogIDw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbIDMgMCBSIF0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKICA8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUgODQyIF0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNCAwIFIgPj4gPj4gL0NvbnRlbnRzIDUgMCBSID4+CmVuZG9iago0IDAgb2JqCiAgPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCiAgPDwgL0xlbmd0aCAxNTAgPj4Kc3RyZWFtCkJUCi9GMSA0NiBUZgoxMCA3NTAgVGQKKEVtaXNzaW9ucyBSZXBvcnQgMjAyNSAtIFN1c3RhaW5hYmlsaXR5IEpvdXJuYWwpIFRqCjAgLTUwIFRkCihDbGFpbXM6IENhcmJvbiBuZXV0cmFsaXR5IGFjaGlldmVkIGJ5IG9mZnNldCByZWZvcmVzdGF0aW9uIGluIEFyZWEgMTItQi4pIFRqCjAgLTMwIFRkCihBY3R1YWwgc2F0ZWxsaXRlIGRhdGEgc2hvd3MgODglIGRlZm9yZXN0YXRpb24gaW4gQXJlYSAxMi1CLikgVGoKRVQKZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTUgMDAwMDAgbiAKMDAwMDAwMDA2NiAwMDAwMCBuIAowMDAwMDAwMTIzIDAwMDAwIGYgCjAwMDAwMDAyMzQgMDAwMDAgbiAKMDAwMDAwMDI5NCAwMDAwMCBuIAp0cmFpbGVyCiAgPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDk5CiUlRU9GCg==' 
-        },
-        { 
-          name: 'amazonian_offset_canopy.png', 
-          type: 'image', 
-          size: '4.2 MB', 
-          content: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' 
-        }
-      ]);
-    } else if (topic === 'theranos') {
-      setQuestion('Did Elizabeth Holmes exaggerate the Edison blood test specifications?');
-      setAttachedFiles([
-        { 
-          name: 'edison_device_schematic.png', 
-          type: 'image', 
-          size: '3.1 MB', 
-          content: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkWP6fDwACfgF+K7t37gAAAABJRU5ErkJggg==' 
-        },
-        { 
-          name: 'lab_deficiencies_newark.pdf', 
-          type: 'pdf', 
-          size: '1.2 MB', 
-          content: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iagogIDw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iagogIDw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbIDMgMCBSIF0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKICA8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUgODQyIF0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNCAwIFIgPj4gPj4gL0NvbnRlbnRzIDUgMCBSID4+CmVuZG9iago0IDAgb2JqCiAgPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCiAgPDwgL0xlbmd0aCAxNDAgPj4Kc3RyZWFtCkJUCi9GMSA0NiBUZgoxMCA3NTAgVGQKKEZEQSBOZXdhcmsgTGFib3JhdG9yeSBJbnNwZWN0aW9uIFJlcG9ydCkgVGoKMCAtNTAgVGQKKERlZmljaWVuY2llcyBmb3VuZDogRWRpc29uIG1hY2hpbmVzIHJldHVybmVkIGRpdmVyZ2VudCB2YWx1ZXMgb24gcG90YXNzaXVtIGFzc2F5cy4pIFRqCkVUCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAwNjYgMDAwMDAgbiAKMDAwMDAwMDEyMyAwMDAwMCBmIAowMDAwMDAwMjM0IDAwMDAwIG4gCjAwMDAwMDAyOTQgMDAwMDAgbiAKdHJhaWxlcgogIDw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQ5OQolJUVPRgo=' 
-        }
-      ]);
-    } else if (topic === 'tesla') {
-      setQuestion('Did Tesla exaggerate its early Solar Roof installation targets?');
-      setAttachedFiles([
-        { 
-          name: 'tesla_solarcity_lawsuit.pdf', 
-          type: 'pdf', 
-          size: '2.4 MB', 
-          content: 'data:application/pdf;base64,JVBERi0xLjQKJeLjz9MKMSAwIG9iagogIDw8IC9UeXBlIC9DYXRhbG9nIC9QYWdlcyAyIDAgUiA+PgplbmRvYmoKMiAwIG9iagogIDw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbIDMgMCBSIF0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKICA8PCAvVHlwZSAvUGFnZSAvUGFyZW50IDIgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUgODQyIF0gL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNCAwIFIgPj4gPj4gL0NvbnRlbnRzIDUgMCBSID4+CmVuZG9iago0IDAgb2JqCiAgPDwgL1R5cGUgL0ZvbnQgL1N1YnR5cGUgL1R5cGUxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+CmVuZG9iago1IDAgb2JqCiAgPDwgL0xlbmd0aCAxNDAgPj4Kc3RyZWFtCkJUCi9GMSA0NiBUZgoxMCA3NTAgVGQKKFRlc2xhLVNvbGFyQ2l0eSBTZWN1cml0aWVzIGxpdGlnYXRpb24sIERlbGF3YXJlIENvdXJ0IG9mIENoYW5jZXJ5LikgVGoKMCAtNTAgVGQKKERvY3VtZW50IGV4dHJhY3Q6IGFjdHVhbCBTb2xhciBSb29mIHdlZWtseSBpbnN0YWxscyB3ZXJlIDIxLiBUYXJnZXRzIHdlcmUgMTAwMC4pIFRqCkVUCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAwNjYgMDAwMDAgbiAKMDAwMDAwMDEyMyAwMDAwMCBmIAowMDAwMDAwMjM0IDAwMDAwIG4gCjAwMDAwMDAyOTQgMDAwMDAgbiAKdHJhaWxlcgogIDw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQ5OQolJUVPRgo=' 
-        },
-        { 
-          name: 'tempered_glass_shingle.png', 
-          type: 'image', 
-          size: '1.9 MB', 
-          content: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mPc/uT/DwAFBwH/993DFAAAAABJRU5ErkJggg==' 
-        }
-      ]);
-    }
-    setResult(null); // Clear previous results to let the user run fresh
-  };
 
-  // Run the autonomous agent inquiry fetch
+
+  // ── Core investigation handler ────────────────────────────────────────
   const runInvestigation = async () => {
     if (!question.trim()) return;
-    
+
+    // ① Stamp request sent time BEFORE the fetch
+    const tSent = new Date().toISOString();
+    const tSentMs = Date.now();
+    setRequestSentAt(tSent);
+    setResponseReceivedAt(null);
+    setVerdictVisibleAt(null);
+    setAnimationComplete(false); // verdict banner hidden until animation finishes
+    setResult(null);
+    setCurrentStep(0);
     setIsInvestigating(true);
     setError(null);
 
     try {
       const response = await fetch('/api/investigate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question,
-          demoMode: useSimulationOnly,
+          demoMode: false,
           inputs: attachedFiles.map(f => ({
             type: f.type,
             name: f.name,
@@ -270,16 +243,33 @@ export default function App() {
       }
 
       const data: InvestigationCase = await response.json();
-      
-      // Load and commit completed case
+
+      // ② Stamp response received — BEFORE any state updates that could render verdict
+      const tReceived = new Date().toISOString();
+      const backendMs = Date.now() - tSentMs;
+      setResponseReceivedAt(tReceived);
+      actualBackendMsRef.current = backendMs; // drives animation pacing
+
+      // Extract supplementary data
+      if (data.thinkingSteps && data.thinkingSteps.length > 0) {
+        setThinkingSteps(data.thinkingSteps);
+      }
+      if (data.allSources && data.allSources.length > 0) {
+        setAllSources(data.allSources);
+      } else if (data.sources && data.sources.length > 0) {
+        setAllSources(data.sources);
+      }
+
+      // Store result (but animationComplete=false so verdict banner is hidden)
       setResult(data);
-      setCurrentStep(0); // Trigger timeline from 0
-      setIsReplaying(true); // Automatically trigger replay simulation!
-      setSelectedNodeId(null); // Focus executes live
+
+      // ③ Start animation from step 0 — verdict only unlocks when it reaches step 13
+      setCurrentStep(0);
+      setSelectedNodeId(null);
+      setIsReplaying(true); // timer kicks off; verdictVisibleAt set inside the effect
 
     } catch (err: any) {
       setError(err.message || 'An error occurred during evidence aggregation.');
-      setIsInvestigating(false);
     } finally {
       setIsInvestigating(false);
     }
@@ -295,16 +285,29 @@ export default function App() {
 
   // Timeline replay custom controls
   const handleStepForward = () => {
-    setCurrentStep(prev => Math.min(13, prev + 1));
+    setCurrentStep(prev => {
+      const next = Math.min(13, prev + 1);
+      if (next === 13) {
+        // User manually fast-forwarded to the end — unlock verdict
+        setAnimationComplete(true);
+        if (!verdictVisibleAt) setVerdictVisibleAt(new Date().toISOString());
+      }
+      return next;
+    });
   };
 
   const handleStepBackward = () => {
     setCurrentStep(prev => Math.max(0, prev - 1));
+    // stepping backward hides the verdict again so it's not stale
+    setAnimationComplete(false);
+    setVerdictVisibleAt(null);
   };
 
   const handleResetTimeline = () => {
     setCurrentStep(0);
     setIsReplaying(false);
+    setAnimationComplete(false);
+    setVerdictVisibleAt(null);
   };
 
   return (
@@ -346,7 +349,7 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="input-section">
           
           {/* Main Inquiry Panel */}
-          <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg space-y-6">
+          <div className="lg:col-span-12 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg space-y-6">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-400" />
@@ -355,7 +358,7 @@ export default function App() {
                 </h2>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Provide any claim, press release, or research target. Upload supportive files like PDFs, spreadsheets, or graphics. The multi-agent LangGraph constellation generates an immutable forensic path with full causal verification.
+                Provide any claim, press release, or research target. Upload supportive files like PDFs, spreadsheets, or graphics. The platform performs real-time crawling and web scraping of the target query to retrieve sources and analyze evidence.
               </p>
             </div>
 
@@ -393,33 +396,6 @@ export default function App() {
                   )}
                 </button>
               </div>
-            </div>
-
-            {/* Quick Sandbox Simulation Trigger */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-3.5 px-4 bg-slate-950/40 rounded-xl border border-slate-850 text-left" id="sandbox-quick-trigger">
-              <div className="space-y-1">
-                <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest block">
-                  Interactive Offline Sandbox
-                </span>
-                <p className="text-[11px] text-slate-400 leading-normal">
-                  Want to instantly inspect the interactive causal graphs, forensic timelines, and counterfactual sandbox? Load a static mockup result immediately without API keys.
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  const sample = getDemoCaseResult(selectedTopic);
-                  setResult(sample as any);
-                  setCurrentStep(13);
-                  setIsReplaying(true);
-                  setSelectedNodeId(null);
-                }}
-                disabled={isInvestigating}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/35 text-amber-400 text-xs font-bold font-mono transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
-                id="view-sample-btn"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>VIEW SAMPLE WORKSPACE</span>
-              </button>
             </div>
 
             {/* Ingress Channels Grid */}
@@ -546,135 +522,54 @@ export default function App() {
             )}
           </div>
 
-          {/* Preset templates panel */}
-          <div className="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg flex flex-col justify-between">
-            <div className="space-y-1.5">
-              <h3 className="text-sm font-bold text-white flex items-center gap-1.5 font-display uppercase tracking-tight">
-                <Compass className="w-4 h-4 text-emerald-400" />
-                Inquiry Presets
-              </h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Instantly load and inspect comprehensive pre-compiled cases showing full multi-agent traceability.
-              </p>
-            </div>
-
-             <div className="space-y-2.5 flex-1 mt-4">
-              {[
-                {
-                  id: 'sustainability',
-                  title: 'Coca-Cola ESG Statements',
-                  desc: 'Virgin plastic claims vs landfills data.',
-                  verdict: 'Exaggerated'
-                },
-                {
-                  id: 'theranos',
-                  title: 'Elizabeth Holmes Trial',
-                  desc: 'FDA audits vs device specs.',
-                  verdict: 'Debunked'
-                },
-                {
-                  id: 'tesla',
-                  title: 'Tesla Solar Roof Target',
-                  desc: 'Install rates vs court dockets.',
-                  verdict: 'Exaggerated'
-                }
-              ].map((template) => (
-                <div
-                  key={template.id}
-                  onClick={() => selectTemplateCase(template.id as any)}
-                  className={`w-full text-left p-3 rounded-xl border transition-all flex flex-col gap-2 group cursor-pointer ${
-                    selectedTopic === template.id ? 'border-emerald-500 bg-slate-950/50' : 'border-slate-850 hover:border-slate-750 hover:bg-slate-950/20'
-                  }`}
-                  id={`preset-card-${template.id}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <p className={`text-xs font-bold transition-colors ${
-                        selectedTopic === template.id ? 'text-emerald-400' : 'text-slate-200 group-hover:text-emerald-400'
-                      }`}>
-                        {template.title}
-                      </p>
-                      <p className="text-[10px] text-slate-400 leading-normal">
-                        {template.desc}
-                      </p>
-                    </div>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border shrink-0 ml-2 ${
-                      template.verdict === 'Debunked' ? 'bg-rose-950/50 border-rose-900/40 text-rose-400' : 'bg-amber-950/50 border-amber-900/40 text-amber-400'
-                    }`}>
-                      {template.verdict}
-                    </span>
-                  </div>
-
-                  <div className="flex gap-2 mt-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectTemplateCase(template.id as any);
-                      }}
-                      className="flex-1 py-1 rounded bg-slate-800 hover:bg-slate-750 text-[10px] font-mono font-bold text-slate-300 transition-all cursor-pointer text-center"
-                    >
-                      Load Case
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        selectTemplateCase(template.id as any);
-                        const sample = getDemoCaseResult(template.id as any);
-                        setResult(sample as any);
-                        setCurrentStep(13);
-                        setIsReplaying(true);
-                      }}
-                      className="flex-1 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/25 text-[10px] font-mono font-bold text-amber-400 transition-all cursor-pointer text-center flex items-center justify-center gap-1"
-                    >
-                      <Eye className="w-3 h-3" /> View Sample
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="border-t border-slate-850 pt-3 text-[11px] text-slate-500 leading-normal">
-              <strong>Consensus Tip:</strong> Choose any interactive scenario above, and press the glowing green <strong>RUN AUDIT</strong> button to watch the graph execute live.
-            </div>
-          </div>
-
         </div>
 
         {/* 2. MAIN RESULTS WORKSPACE: THE INTEGRATED SPLIT PANEL CONSOLE */}
         {result && !isInvestigating && (
           <div className="space-y-8 animate-fade-in" id="results-workspace">
-            
-            {result.demoMode && (
-              <div className="bg-amber-950/15 border border-amber-500/40 p-5 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between text-left shadow-lg animate-fade-in" id="demo-mode-banner">
-                <div className="flex gap-4 items-center">
-                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 shrink-0">
-                    <AlertTriangle className="w-5 h-5 animate-pulse" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white uppercase tracking-wider font-display flex items-center gap-2">
-                      Interactive Sandbox Mockup Active
-                    </h4>
-                    <p className="text-[11px] text-amber-300/80 leading-normal mt-0.5 max-w-2xl">
-                      You are inspecting a static pre-compiled template case designed to demonstrate the complete clickable traceability, causal graph transitions, and counterfactual simulation. To execute a dynamic, live inquiry against real web sources, use the prompt bar above and click <strong>RUN AUDIT</strong>.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setResult(null);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className="w-full md:w-auto px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25 text-[10px] font-mono font-bold uppercase tracking-wider cursor-pointer shrink-0 text-center"
-                >
-                  Configure Live Run
-                </button>
-              </div>
-            )}
 
             {true && (
               <>
-                {/* AUDIT SUMMARY ACCENT HEADER CARD */}
-                <div className={`border rounded-2xl p-6 flex flex-col md:flex-row gap-6 justify-between items-center relative overflow-hidden shadow-md border-l-4 ${getVerdictBadgeColor(result.conclusion.verdict)}`}>
+                {/* ── CAUSAL TIMESTAMP RIBBON ───────────────────────────────────────
+                    Proves: requestSentAt < responseReceivedAt < verdictVisibleAt
+                    The verdict banner below ONLY renders when verdictVisibleAt is set,
+                    which happens inside the animation timer, AFTER the animation
+                    completes at step 13. This ribbon is always visible for inspection. */}
+                {requestSentAt && (
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[10px]" id="causal-timestamp-ribbon">
+                    <span className="text-slate-500 font-bold uppercase tracking-widest">Causal Order Proof</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shrink-0" />
+                      <span className="text-slate-500">① Request Sent:</span>
+                      <span className="text-sky-300 font-bold" id="ts-request-sent">{new Date(requestSentAt).toLocaleTimeString(undefined, {hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3 as any})}</span>
+                    </span>
+                    {responseReceivedAt && (
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                        <span className="text-slate-500">② Response Received:</span>
+                        <span className="text-amber-300 font-bold" id="ts-response-received">{new Date(responseReceivedAt).toLocaleTimeString(undefined, {hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3 as any})}</span>
+                        <span className="text-slate-600">(+{Math.round((new Date(responseReceivedAt).getTime() - new Date(requestSentAt).getTime())/1000)}s backend)</span>
+                      </span>
+                    )}
+                    {verdictVisibleAt ? (
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                        <span className="text-slate-500">③ Verdict Visible:</span>
+                        <span className="text-emerald-300 font-bold" id="ts-verdict-visible">{new Date(verdictVisibleAt).toLocaleTimeString(undefined, {hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3 as any})}</span>
+                        <span className="text-slate-600">(+{Math.round((new Date(verdictVisibleAt).getTime() - new Date(responseReceivedAt!).getTime())/1000)}s animation)</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-600 animate-pulse shrink-0" />
+                        <span className="text-slate-600">③ Verdict: awaiting animation step 13...</span>
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* AUDIT SUMMARY ACCENT HEADER CARD — only renders when animation is complete */}
+                {animationComplete && (
+                <div className={`border rounded-2xl p-6 flex flex-col md:flex-row gap-6 justify-between items-center relative overflow-hidden shadow-md border-l-4 ${getVerdictBadgeColor(result.conclusion.verdict)} animate-fade-in`} id="verdict-banner">
                   <div className="space-y-2.5 max-w-4xl flex-1 text-left">
                     <div>
                       <span className="text-[10px] font-mono uppercase tracking-wider font-bold opacity-60 block">
@@ -703,6 +598,18 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+                )}
+
+                {/* Waiting message while animation plays */}
+                {!animationComplete && (
+                  <div className="border border-amber-800/30 bg-amber-950/10 rounded-2xl p-5 flex items-center gap-3" id="verdict-pending">
+                    <div className="w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping shrink-0" />
+                    <div className="text-xs font-mono">
+                      <span className="text-amber-300 font-bold">PIPELINE EXECUTING</span>
+                      <span className="text-slate-400 ml-2">— verdict will appear when the agent swarm completes (step {currentStep}/13)</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* DUAL INTERACTIVE WORKSPACE: GRAPH LOOP ON THE LEFT & FORENSIC LEDGER ON THE RIGHT */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="dashboard-main-split">
@@ -720,6 +627,8 @@ export default function App() {
                       onStepForward={handleStepForward}
                       onStepBackward={handleStepBackward}
                       onReset={handleResetTimeline}
+                      thinkingSteps={thinkingSteps}
+                      question={question}
                     />
                   </div>
 
@@ -734,6 +643,14 @@ export default function App() {
 
                 </div>
 
+                {/* AGENT THINKING / CHAIN-OF-THOUGHT TRACE */}
+                {thinkingSteps.length > 0 && (
+                  <ThinkingProcessViewer
+                    thinkingSteps={thinkingSteps}
+                    isLive={false}
+                  />
+                )}
+
                 {/* CITATION TRAIL & INTERACTIVE EVIDENCE GRAPH VISUALIZER */}
                 <CitationTrailViewer 
                   question={question} 
@@ -743,6 +660,14 @@ export default function App() {
                   decisionGraph={result.decisionGraph}
                   demoMode={result.demoMode}
                 />
+
+                {/* ALL SOURCES - FULL TRANSPARENCY (accepted + rejected) */}
+                {allSources.length > 0 && (
+                  <AllSourcesPanel
+                    allSources={allSources}
+                    question={question}
+                  />
+                )}
 
                 {/* IMPACT ANALYSIS & COUNTERFACTUAL EVIDENCE SANDBOX */}
                 <CounterfactualSandbox
@@ -759,6 +684,7 @@ export default function App() {
                   summary={result.conclusion.summary}
                   confidence={result.conclusion.confidence}
                   sources={result.sources}
+                  allSources={result.allSources}
                   decisionTrace={result.decisionTrace}
                   alternatives={result.alternatives}
                   hallucinationChecks={result.hallucinationChecks}

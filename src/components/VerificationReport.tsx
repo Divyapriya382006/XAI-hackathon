@@ -8,6 +8,7 @@ interface VerificationReportProps {
   summary: string;
   confidence: number;
   sources?: any[];
+  allSources?: any[];
   decisionTrace?: any[];
   alternatives?: any[];
   hallucinationChecks?: any;
@@ -19,6 +20,7 @@ export default function VerificationReport({
   summary, 
   confidence,
   sources = [],
+  allSources = [],
   decisionTrace = [],
   alternatives = [],
   hallucinationChecks
@@ -61,6 +63,53 @@ export default function VerificationReport({
     let val = Array.from(seed).reduce((acc, char) => acc + char.charCodeAt(0), 0);
     return `sha256-a1c8f${val.toString(16)}bc7e2f598e4d3c92841f`;
   };
+
+  const allSrcs = allSources && allSources.length > 0 ? allSources : sources || [];
+  const acceptedSources = allSrcs.filter((s: any) => s.decision === "accepted").sort((a: any, b: any) => b.trustScore - a.trustScore);
+  const topSupporting = acceptedSources.slice(0, 3);
+  const rejectedSources = allSrcs.filter((s: any) => s.decision === "rejected" || s.credibility < 55);
+  const rejectedCount = rejectedSources.length;
+
+  const reasonCounts: Record<string, number> = {};
+  rejectedSources.forEach((s: any) => {
+    const code = s.reasonCode || "low_domain_trust";
+    reasonCounts[code] = (reasonCounts[code] || 0) + 1;
+  });
+  let mostCommonReason = "N/A";
+  let maxCount = 0;
+  for (const code in reasonCounts) {
+    if (reasonCounts[code] > maxCount) {
+      maxCount = reasonCounts[code];
+      mostCommonReason = code;
+    }
+  }
+
+  const renderTldr = () => (
+    <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl font-mono text-xs text-left text-slate-300 space-y-1 my-4">
+      <div className="text-emerald-400 font-bold tracking-wider uppercase border-b border-slate-800 pb-1.5 mb-1.5 flex justify-between items-center">
+        <span>📋 Final Result Audit Summary</span>
+        <span className="text-[9px] text-slate-500 font-normal">TL;DR</span>
+      </div>
+      <div><strong>Verdict:</strong> {verdict}</div>
+      <div><strong>Confidence:</strong> {confidence}%</div>
+      <div>
+        <strong>Top supporting sources:</strong>
+        {topSupporting.length > 0 ? (
+          <ul className="list-disc list-inside ml-2 mt-0.5 space-y-0.5 text-slate-400">
+            {topSupporting.map((s: any, i: number) => (
+              <li key={i} className="truncate">
+                {s.title} — <span className="text-sky-400">{s.domainType}</span> — <span className="text-emerald-400">{s.trustScore}%</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <span className="text-slate-500 ml-2">None</span>
+        )}
+      </div>
+      <div className="leading-relaxed"><strong>Top reason for this verdict:</strong> {summary}</div>
+      <div><strong>Sources rejected:</strong> {rejectedCount} {rejectedCount > 0 ? `(most common reason: ${mostCommonReason})` : ""}</div>
+    </div>
+  );
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6" id="final-verification-report">
@@ -110,6 +159,9 @@ export default function VerificationReport({
         <div className="absolute top-4 right-4 border-2 border-emerald-500/20 text-emerald-500/30 font-mono font-bold text-[10px] uppercase tracking-widest px-3 py-1.5 rounded rotate-12 select-none pointer-events-none">
           LOCAL AUDIT TRACE
         </div>
+
+        {/* TL;DR at the very top */}
+        {renderTldr()}
 
         {/* 1. EXECUTIVE SUMMARY */}
         <div className="space-y-2 border-b border-slate-850 pb-5">
@@ -417,6 +469,9 @@ export default function VerificationReport({
             </p>
           </div>
         </div>
+
+        {/* TL;DR repeated at the very bottom */}
+        {renderTldr()}
 
       </div>
 

@@ -145,19 +145,23 @@ export default function ForensicLedger({ selectedNodeId, currentStep, question }
         )}
 
         {/* Causal Citation rejection log (Custom mock rules for transparency) */}
-        {activeNode.id === 'search' && (
-          <div className="bg-rose-950/20 border border-rose-500/15 p-3 rounded-xl space-y-1 text-[11px] leading-relaxed">
-            <strong className="text-rose-400 block font-mono text-[10px] uppercase tracking-wider">
-              ✖ REJECTED CANDIDATE SOURCE FILE
-            </strong>
-            <p className="text-slate-300">
-              <strong>Source:</strong> wikipedia.org/wiki/Coca-Cola_sustainability_criticism
-            </p>
-            <p className="text-slate-400 mt-0.5">
-              <strong>Audit Reason:</strong> Lacks regulatory compliance sign-off. Flagged as insufficient authority for causal verification. Replaced by direct EPA 2023 site inspection dockets.
-            </p>
-          </div>
-        )}
+        {activeNode.id === 'search' && (() => {
+          const domainMatch = question.match(/\b([A-Z][a-zA-Z0-9]+)\b/);
+          const subject = domainMatch ? domainMatch[1] : "target_entity";
+          return (
+            <div className="bg-rose-950/20 border border-rose-500/15 p-3 rounded-xl space-y-1 text-[11px] leading-relaxed text-left">
+              <strong className="text-rose-400 block font-mono text-[10px] uppercase tracking-wider">
+                ✖ REJECTED CANDIDATE SOURCE FILE
+              </strong>
+              <p className="text-slate-300">
+                <strong>Source:</strong> wikipedia.org/wiki/{subject}_sustainability_criticism
+              </p>
+              <p className="text-slate-400 mt-0.5">
+                <strong>Audit Reason:</strong> Lacks regulatory compliance sign-off. Flagged as insufficient authority for causal verification. Replaced by direct verified site inspection dockets.
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Inputs / Outputs Panel */}
         <div className="space-y-2">
@@ -219,7 +223,7 @@ export default function ForensicLedger({ selectedNodeId, currentStep, question }
               <div>
                 <strong className="text-slate-400">System Prompt:</strong>
                 <p className="mt-1 bg-slate-900 p-2 rounded text-slate-400">
-                  You are {activeNode.label}, acting within a cryptographically verifiable multi-agent autonomous loop. Resolve conflicts using standard causal-reasoning models. Ground every assertion in SHA-256 indexed documents. Reject secondary blog content when primary SEC/EPA/FDA filings are present.
+                  You are {activeNode.label}, acting within a cryptographically verifiable multi-agent autonomous loop. Resolve conflicts using standard causal-reasoning models. Ground every assertion in SHA-256 indexed documents. Reject secondary blog content when primary high-trust official/regulatory filings are present.
                 </p>
               </div>
               <div>

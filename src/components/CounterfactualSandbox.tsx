@@ -207,14 +207,25 @@ export default function CounterfactualSandbox({
             </div>
 
             {/* Warnings block */}
-            {isGovDisabled && activeIds.length > 0 && (
-              <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex gap-2 items-start text-amber-300">
-                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                <div className="text-[11px] leading-normal">
-                  <strong>Regulatory Deficit:</strong> Removing EPA/FDA agency files forces reliance on secondary blogs/PR. Confidence is degraded due to missing regulatory alignment.
+            {isGovDisabled && activeIds.length > 0 && (() => {
+              const disabledTypes = Array.from(new Set(
+                initialSources.filter((s) => !activeIds.includes(s.id)).map((s) => s.domainType)
+              ));
+              const activeTypes = Array.from(new Set(
+                initialSources.filter((s) => activeIds.includes(s.id)).map((s) => s.domainType)
+              ));
+              const dynamicWarning = disabledTypes.length > 0 && activeTypes.length > 0
+                ? `Removing ${disabledTypes.map(t => `[${t}]`).join(', ')} sources reduces reliance on ${activeTypes.map(t => `[${t}]`).join(', ')} sources.`
+                : "Removing authoritative sources reduces query coverage and increases reliance on uncorroborated third-party blogs.";
+              return (
+                <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex gap-2 items-start text-amber-300">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div className="text-[11px] leading-normal text-left">
+                    <strong>Authority Deficit:</strong> {dynamicWarning}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Dynamic Confidence Meters */}

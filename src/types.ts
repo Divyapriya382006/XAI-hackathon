@@ -17,6 +17,10 @@ export interface Source {
   domain: string;
   date: string;
   shapWeights: ShapWeights;
+  decision?: string;
+  reasonText?: string;
+  rawExcerpt?: string;
+  domainType?: 'gov' | 'edu' | 'news_wire' | 'ngo' | 'corporate' | 'blog' | 'social' | 'other';
 }
 
 export interface LimePhrase {
@@ -62,6 +66,15 @@ export interface TraceEvent {
   timestamp: string;
 }
 
+export interface ThinkingStep {
+  step: number;
+  agent: string;
+  thought: string;
+  action: string;
+  observation: string;
+  timestamp: string;
+}
+
 export interface Node {
   id: string;
   label: string;
@@ -102,6 +115,8 @@ export interface ConfidenceBreakdown {
 }
 
 export interface InvestigationCase {
+  missionId?: string;
+  queries?: string[];
   conclusion: {
     verdict: string;
     summary: string;
@@ -116,7 +131,10 @@ export interface InvestigationCase {
   decisionGraph: DecisionGraph;
   imageAnalysis?: ImageAnalysis;
   demoMode?: boolean;
+  isSampleInvestigation?: boolean;
   message?: string;
+  thinkingSteps?: ThinkingStep[];
+  allSources?: Source[];
 }
 
 export interface UserInputFile {

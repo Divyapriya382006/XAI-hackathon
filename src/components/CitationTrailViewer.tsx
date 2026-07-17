@@ -29,7 +29,7 @@ import {
   FileDown
 } from 'lucide-react';
 
-import { ShapWeights, Source, Claim, FALLBACK_DATA } from '../demo_cases';
+import { ShapWeights, Source, Claim } from '../types';
 
 export default function CitationTrailViewer({ 
   question, 
@@ -50,22 +50,11 @@ export default function CitationTrailViewer({
   missionId?: string;
   queries?: string[];
 }) {
-  // Determine active theme based on question keywords
-  const getActiveThemeKey = (): string => {
-    const q = question.toLowerCase();
-    if (q.includes('theranos') || q.includes('edison') || q.includes('holmes')) return 'theranos';
-    if (q.includes('solar') || q.includes('tesla') || q.includes('roof')) return 'tesla';
-    return 'sustainability'; // default
-  };
-
-  const themeKey = getActiveThemeKey();
-  const fallback = FALLBACK_DATA[themeKey] || FALLBACK_DATA.sustainability;
-
-  // Use passed props, or fall back to high-fidelity matching mock datasets ONLY when demoMode is active
-  const activeSources = (sources && sources.length > 0) ? sources : (demoMode ? fallback.sources : []);
-  const activeClaims = (claims && claims.length > 0) ? claims : (demoMode ? fallback.claims : []);
-  const activeMissionId = missionId || (demoMode ? fallback.missionId : `SECURE-2026-${Math.abs(question.split('').reduce((s, c) => Math.imul(31, s) + c.charCodeAt(0) | 0, 0)) % 10000}`);
-  const activeQueries = (queries && queries.length > 0) ? queries : (demoMode ? fallback.queries : [`Verification audit check for: "${question}"`]);
+  // Use passed props
+  const activeSources = sources || [];
+  const activeClaims = claims || [];
+  const activeMissionId = missionId || `SECURE-2026-${Math.abs(question.split('').reduce((s, c) => Math.imul(31, s) + c.charCodeAt(0) | 0, 0)) % 10000}`;
+  const activeQueries = (queries && queries.length > 0) ? queries : [`Verification audit check for: "${question}"`];
   
   // Tabs: 'explorer' (Source Explorer & Metadata), 'provenance' (Causal Graph & Proof Cards), 'agent' (Browser Agent Timeline & Replay)
   const [activeTab, setActiveTab] = useState<'explorer' | 'provenance' | 'agent'>('explorer');
