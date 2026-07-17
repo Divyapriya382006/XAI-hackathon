@@ -1,0 +1,6 @@
+{
+  "name": "Explainable Autonomous Investigation Platform",
+  "description": "An explainable multi-agent platform for deep research, investigation, truth-checking, and auditable decisions with counterfactual, alternative hypothesis, and confidence explanation models.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
