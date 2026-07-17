@@ -223,7 +223,8 @@ export default function App() {
     setError(null);
 
     try {
-      const response = await fetch('/api/investigate', {
+      const apiBase = process.env.REACT_APP_API_BASE || '';
+      const response = await fetch(`${apiBase}/api/investigate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
