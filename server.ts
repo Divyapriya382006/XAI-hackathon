@@ -12,9 +12,15 @@ dotenv.config();
 const app = express();
 
 import cors from "cors";
-app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
-const PORT = parseInt(process.env.PORT || "3000", 10);
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  credentials: true
+}));
+app.options("*", cors() as any); // Explicitly handle preflight OPTIONS for all paths
 
+const PORT = parseInt(process.env.PORT || "3000", 10);
 app.use(express.json({ limit: "10mb" }));
 
 // ─── Types ────────────────────────────────────────────────────────────────────
