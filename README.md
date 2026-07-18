@@ -204,20 +204,62 @@ This bundles the frontend into static assets and compiles the backend (e.g. into
 
 ## Using the app
 
-1. **Enter a claim or question** — e.g. *"Did [Company] overstate [claim] by [year]?"*
-2. **(Optional) Attach files or URLs** — PDFs, images, or direct links get folded into the evidence pool alongside live search results.
-3. **Choose a mode**:
-   - **Live Agent** — real web search + real scraping + real Gemini reasoning (requires both API keys).
-   - **Simulation** — instant, offline, clearly labeled as a sandbox; consumes no API quota.
-4. **Watch the pipeline run** — the left panel animates the live agent graph (Planner → Retriever → Evidence Evaluator → Judge → Explainer); the right panel streams the Forensic Ledger as each stage completes.
-5. **Inspect the verdict**:
-   - Click any citation marker to open a **Proof Card**: the real URL, fetch timestamp, HTTP status, and the exact verbatim excerpt used.
-   - Open the **Source Explorer** to see every source that was crawled, whether accepted or rejected, and the specific `reasonCode` for that decision.
-   - Use the **Counterfactual Sandbox** to toggle sources off and watch the confidence/verdict recompute live.
-   - Check **Alternative Hypotheses** to see what other conclusions were considered and why they were rejected.
-6. **Export** — download the Verification Report, the `crawl_manifest.json`, and `citations.json` bundle for offline review or reproduction.
+### 1. Enter a claim or question
+Type any factual claim you want to verify.
 
----
+**Try these sample questions:**
+- *Did Apple overstate the environmental benefits of becoming carbon neutral by 2030?*
+- *Is OnePlus ceasing new product rollouts and phasing out smartphone sales in the US and Europe?*
+- *Did Coca-Cola exaggerate its sustainability and plastic recycling claims between 2022 and 2024?*
+- *Did Facebook accurately report misinformation removal statistics during major elections?*
+- *Did BP's public sustainability reports align with independent environmental audits?*
+
+### 2. (Optional) Attach files or URLs
+Upload PDFs, images, or provide direct links. They are automatically incorporated into the evidence pool alongside live web search results.
+
+### 3. Choose a mode
+- **Live Agent** — Performs real web search, live scraping, and Gemini-powered reasoning *(requires both API keys)*.
+- **Simulation** — Runs an offline sandbox using mock evidence. No API calls are made and no quota is consumed.
+
+### 4. Watch the investigation unfold
+The verification pipeline executes in real time.
+
+**Left Panel**
+- Planner
+- Retriever
+- Evidence Evaluator
+- Judge
+- Explainer
+
+**Right Panel**
+- Live **Forensic Ledger** streaming every decision and reasoning step as each stage completes.
+
+### 5. Inspect the verdict
+
+#### Proof Cards
+Click any citation marker to view:
+- Original source URL
+- Fetch timestamp
+- HTTP status
+- Exact verbatim excerpt used as evidence
+
+#### Source Explorer
+Browse every crawled source, including accepted and rejected evidence. Each rejected source includes a specific `reasonCode`.
+
+#### Counterfactual Sandbox
+Disable individual sources to instantly recompute the verdict and confidence score, revealing each source's impact on the final conclusion.
+
+#### Alternative Hypotheses
+Review competing explanations considered during verification and the evidence that led to their rejection.
+
+### 6. Export results
+Download the complete verification package for auditing or reproduction.
+
+- `Verification_Report.pdf`
+- `crawl_manifest.json`
+- `citations.json`
+
+  ---
 
 ## Data model
 
